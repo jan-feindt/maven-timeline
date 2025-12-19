@@ -5,6 +5,7 @@
  */
 package io.takari.maven.timeline.buildevents;
 
+import io.takari.maven.timeline.Dependency;
 import io.takari.maven.timeline.Event;
 import io.takari.maven.timeline.Timeline;
 import io.takari.maven.timeline.TimelineSerializer;
@@ -14,8 +15,13 @@ import java.io.IOException;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.maven.execution.AbstractExecutionListener;
@@ -41,6 +47,10 @@ public final class BuildEventListener extends AbstractExecutionListener {
     private final Map<Long, AtomicLong> threadToTrackNum = new ConcurrentHashMap<>();
     private final Map<Long, Integer> threadNumToColour = new ConcurrentHashMap<>();
     private final AtomicLong trackNum = new AtomicLong(0);
+    private final Map<String, MavenProject> projects = new LinkedHashMap<>();
+    private final Map<String, Long> projectStartTimes = new ConcurrentHashMap<>();
+    private final Map<String, Long> projectEndTimes = new ConcurrentHashMap<>();
+    private final Map<String, List<String>> projectDependencies = new ConcurrentHashMap<>();
 
     private final long startTime;
 
@@ -100,6 +110,49 @@ public final class BuildEventListener extends AbstractExecutionListener {
     }
 
     @Override
+    public void projectStarted(ExecutionEvent event) {
+        MavenProject project = event.getProject();
+        if (project != null) {
+            String projectKey = getProjectKey(project);
+            projects.put(projectKey, project);
+            projectStartTimes.put(projectKey, nowInUtc());
+
+            // Collect dependencies using getProjectReferences which is safe API
+            List<String> deps = new ArrayList<>();
+            if (project.getProjectReferences() != null) {
+                for (Object refObj : project.getProjectReferences().keySet()) {
+                    String refKey = refObj.toString();
+                    // Project references are in the format "groupId:artifactId:version"
+                    // We need just "groupId:artifactId"
+                    String[] parts = refKey.split(":");
+                    if (parts.length >= 2) {
+                        deps.add(parts[0] + ":" + parts[1]);
+                    }
+                }
+            }
+            projectDependencies.put(projectKey, deps);
+        }
+    }
+
+    @Override
+    public void projectSucceeded(ExecutionEvent event) {
+        MavenProject project = event.getProject();
+        if (project != null) {
+            String projectKey = getProjectKey(project);
+            projectEndTimes.put(projectKey, nowInUtc());
+        }
+    }
+
+    @Override
+    public void projectFailed(ExecutionEvent event) {
+        MavenProject project = event.getProject();
+        if (project != null) {
+            String projectKey = getProjectKey(project);
+            projectEndTimes.put(projectKey, nowInUtc());
+        }
+    }
+
+    @Override
     public void mojoSkipped(ExecutionEvent event) {
         mojoEnd(event);
     }
@@ -147,6 +200,107 @@ public final class BuildEventListener extends AbstractExecutionListener {
                 mojo.getExecutionId());
     }
 
+    private String getProjectKey(MavenProject project) {
+        return project.getGroupId() + ":" + project.getArtifactId();
+    }
+
+    private List<Dependency> collectDependencies() {
+        List<Dependency> dependencies = new ArrayList<>();
+        Set<String> criticalPathEdges = calculateCriticalPath();
+
+        for (Map.Entry<String, List<String>> entry : projectDependencies.entrySet()) {
+            String fromKey = entry.getKey();
+            for (String toKey : entry.getValue()) {
+                // Only include dependencies that are part of the reactor build
+                if (projects.containsKey(toKey)) {
+                    String edgeKey = toKey + "->" + fromKey;
+                    boolean isCritical = criticalPathEdges.contains(edgeKey);
+                    dependencies.add(new Dependency(toKey, fromKey, "compile", isCritical));
+                }
+            }
+        }
+
+        return dependencies;
+    }
+
+    private Set<String> calculateCriticalPath() {
+        Set<String> criticalPathEdges = new HashSet<>();
+
+        if (projects.isEmpty()) {
+            return criticalPathEdges;
+        }
+
+        // Calculate longest path by duration
+        Map<String, Long> longestPathToNode = new HashMap<>();
+        Map<String, String> predecessorOnLongestPath = new HashMap<>();
+
+        // Initialize all projects with their durations
+        for (String projectKey : projects.keySet()) {
+            Long startTime = projectStartTimes.get(projectKey);
+            Long endTime = projectEndTimes.get(projectKey);
+            if (startTime != null && endTime != null) {
+                longestPathToNode.put(projectKey, endTime - startTime);
+            } else {
+                longestPathToNode.put(projectKey, 0L);
+            }
+        }
+
+        // Calculate longest paths considering dependencies
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (Map.Entry<String, List<String>> entry : projectDependencies.entrySet()) {
+                String projectKey = entry.getKey();
+                Long projectDuration = getDuration(projectKey);
+
+                for (String depKey : entry.getValue()) {
+                    if (projects.containsKey(depKey)) {
+                        Long depLongestPath = longestPathToNode.get(depKey);
+                        Long currentLongestPath = longestPathToNode.get(projectKey);
+
+                        if (depLongestPath != null && currentLongestPath != null) {
+                            Long newPath = depLongestPath + projectDuration;
+                            if (newPath > currentLongestPath) {
+                                longestPathToNode.put(projectKey, newPath);
+                                predecessorOnLongestPath.put(projectKey, depKey);
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Find the node with the longest path
+        String endNode = null;
+        Long maxPath = 0L;
+        for (Map.Entry<String, Long> entry : longestPathToNode.entrySet()) {
+            if (entry.getValue() > maxPath) {
+                maxPath = entry.getValue();
+                endNode = entry.getKey();
+            }
+        }
+
+        // Backtrack to find all edges on the critical path
+        String currentNode = endNode;
+        while (currentNode != null && predecessorOnLongestPath.containsKey(currentNode)) {
+            String predecessor = predecessorOnLongestPath.get(currentNode);
+            criticalPathEdges.add(predecessor + "->" + currentNode);
+            currentNode = predecessor;
+        }
+
+        return criticalPathEdges;
+    }
+
+    private Long getDuration(String projectKey) {
+        Long startTime = projectStartTimes.get(projectKey);
+        Long endTime = projectEndTimes.get(projectKey);
+        if (startTime != null && endTime != null) {
+            return endTime - startTime;
+        }
+        return 0L;
+    }
+
     private void report() throws IOException {
         File path = output.getParentFile();
         if (!(path.isDirectory() || path.mkdirs())) {
@@ -164,8 +318,9 @@ public final class BuildEventListener extends AbstractExecutionListener {
         long endTime = nowInUtc();
         WebUtils.copyResourcesToDirectory(getClass(), "timeline", mavenTimeline.getParentFile());
         try (Writer mavenTimelineWriter = Files.newBufferedWriter(mavenTimeline.toPath())) {
-            Timeline timeline =
-                    new Timeline(startTime, endTime, groupId, artifactId, new ArrayList<>(timelineMetrics.values()));
+            List<Dependency> dependencies = collectDependencies();
+            Timeline timeline = new Timeline(
+                    startTime, endTime, groupId, artifactId, new ArrayList<>(timelineMetrics.values()), dependencies);
             mavenTimelineWriter.write("window.timelineData = ");
             TimelineSerializer.serialize(mavenTimelineWriter, timeline);
             mavenTimelineWriter.write(";");

@@ -15,6 +15,11 @@ function TimeLine(timelineData) {
   addProperty(document.getElementsByTagName("header")[0], timelineData, "groupId");
   addProperty(document.getElementsByTagName("header")[0], timelineData, "artifactId");
 
+  var dependencyRenderer = null;
+  if (typeof DependencyRenderer !== 'undefined') {
+    dependencyRenderer = new DependencyRenderer(timelineData);
+  }
+
   function twoDigits(num) {
     if(num == undefined || Number.isNaN(num)) return "00";
     if(num < 10) return "0" + num;
@@ -68,7 +73,7 @@ function TimeLine(timelineData) {
       formatTime(event.duration) + ")";
   }
 
-  this.render = function(zoomFactor) {
+  this.render = function(zoomFactor, showDependencies, showCriticalPath) {
     console.log(zoomFactor);
     var sessionStartTime = timelineData.start;
     var sessionEndTime = timelineData.end;
@@ -143,6 +148,13 @@ function TimeLine(timelineData) {
 
     for(var currentTime = sessionStartTime - (sessionStartTime % (1000*stepSeconds)) + (1000*stepSeconds); currentTime < sessionEndTime; currentTime += (1000*stepSeconds) ) {
       renderTimeLabel(currentTime, sessionStartTime, zoomFactor, rootContainer);
+    }
+
+    // Render dependency arrows
+    if (dependencyRenderer) {
+      var showDeps = showDependencies !== undefined ? showDependencies : false;
+      var showCritical = showCriticalPath !== undefined ? showCriticalPath : false;
+      dependencyRenderer.render(zoomFactor, showDeps, showCritical);
     }
   };
 

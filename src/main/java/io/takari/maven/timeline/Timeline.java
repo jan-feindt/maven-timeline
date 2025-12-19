@@ -16,12 +16,20 @@ public class Timeline {
     private final String groupId;
     private final String artifactId;
     private final List<Event> events;
+    private final List<Dependency> dependencies;
 
-    public Timeline(long start, long end, String groupId, String artifactId, List<Event> events) {
+    public Timeline(
+            long start,
+            long end,
+            String groupId,
+            String artifactId,
+            List<Event> events,
+            List<Dependency> dependencies) {
         this.start = start;
         this.end = end;
         this.groupId = groupId;
         this.artifactId = artifactId;
         this.events = events;
+        this.dependencies = dependencies;
     }
 }

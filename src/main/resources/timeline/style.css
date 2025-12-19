@@ -145,3 +145,88 @@ header > .groupId:after,
 .highlightingBox.ui-state-active {
   opacity: 1;
 }
+
+/* Dependency arrows */
+.dependency-arrows-svg {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dependency-arrow {
+  fill: none;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  transition: opacity 0.3s ease;
+}
+
+.dependency-arrow.regular {
+  stroke: rgba(0, 0, 0, 0.2);
+  stroke-width: 1.5px;
+  opacity: 0.8;
+}
+
+.dependency-arrow.critical-path {
+  stroke: #ff5722;
+  stroke-width: 3px;
+  opacity: 0.8;
+}
+
+.dependency-arrow:hover {
+  opacity: 1;
+}
+
+/* Arrow legend */
+.arrow-legend {
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+.arrow-legend .legend-item {
+  display: flex;
+  align-items: center;
+  margin: 5px 0;
+}
+
+.arrow-legend .legend-line {
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  margin-right: 10px;
+  position: relative;
+}
+
+.arrow-legend .legend-line::after {
+  content: '';
+  position: absolute;
+  right: -5px;
+  top: -3px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid transparent;
+  transform: rotate(-90deg);
+}
+
+.arrow-legend .legend-line.regular-dep {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.arrow-legend .legend-line.regular-dep::after {
+  border-top-color: rgba(0, 0, 0, 0.2);
+}
+
+.arrow-legend .legend-line.critical-dep {
+  background-color: #ff5722;
+}
+
+.arrow-legend .legend-line.critical-dep::after {
+  border-top-color: #ff5722;
+}
