@@ -2,6 +2,10 @@
  * Module for rendering dependency arrows between artifacts in the timeline
  */
 
+// Constants for track layout (must match timeline.js)
+var TRACK_HEIGHT = 60;
+var TRACK_MIDDLE_OFFSET = 30;
+
 function DependencyRenderer(timelineData) {
   var dependencies = timelineData.dependencies || [];
   var events = timelineData.events || [];
@@ -56,6 +60,7 @@ function DependencyRenderer(timelineData) {
   
   /**
    * Calculate position in pixels
+   * Returns minimum of 1 pixel to ensure visibility of even very short events
    */
   function normalize(absoluteStart, relativeStart, zoomFactor) {
     return Math.max(1, Math.abs((relativeStart - absoluteStart) / zoomFactor));
@@ -151,10 +156,10 @@ function DependencyRenderer(timelineData) {
       
       // Calculate positions
       var x1 = normalize(sessionStartTime, fromEvent.end, zoomFactor);
-      var y1 = fromEvent.trackNum * 60 + 30; // Middle of the track (60px height)
+      var y1 = fromEvent.trackNum * TRACK_HEIGHT + TRACK_MIDDLE_OFFSET; // Middle of the track
       
       var x2 = normalize(sessionStartTime, toEvent.start, zoomFactor);
-      var y2 = toEvent.trackNum * 60 + 30;
+      var y2 = toEvent.trackNum * TRACK_HEIGHT + TRACK_MIDDLE_OFFSET;
       
       // Create path element
       var path = document.createElementNS("http://www.w3.org/2000/svg", "path");

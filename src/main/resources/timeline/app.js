@@ -143,7 +143,7 @@ function TimeLineApp() {
       '<div class="legend-item"><span class="legend-line critical-dep"></span> Critical Path</div>';
     controlsContainer.appendChild(arrowLegend);
 
-    legendElement = document.createElement("legend");
+    var legendElement = document.createElement("legend");
     legendElement.innerText = "Highlight by phase";
     controlsContainer.appendChild(legendElement);
 
