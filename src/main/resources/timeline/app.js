@@ -82,6 +82,15 @@ function TimeLineApp() {
     controlsContainer.appendChild(h2);
     document.getElementsByTagName("aside")[0].appendChild(controlsContainer);
 
+    // State for dependency visibility
+    var currentZoom = zoomDefault;
+    var showDependencies = false;
+    var showCriticalPath = false;
+
+    function updateTimeline() {
+      timeLine.render(currentZoom, showDependencies, showCriticalPath);
+    }
+
     var sliderContainer = document.createElement("div");
     var slider = document.createElement("div");
     slider.setAttribute("id", "zoomSlider");
@@ -96,7 +105,8 @@ function TimeLineApp() {
       $("#zoomSlider").slider({
         min: zoomMin, max: zoomMax, step: 1, value: zoomDefault,
         change: function (ev, ui) {
-          timeLine.render(ui.value);
+          currentZoom = ui.value;
+          updateTimeline();
         }
       });
     });
@@ -109,6 +119,29 @@ function TimeLineApp() {
     appendCssClassToggle(controlsContainer, "phase", true);
     appendCssClassToggle(controlsContainer, "id", false);
     appendCssClassToggle(controlsContainer, "duration", true);
+
+    // Add dependency controls
+    legendElement = document.createElement("legend");
+    legendElement.innerText = "Dependency Arrows";
+    controlsContainer.appendChild(legendElement);
+
+    appendDependencyToggle(controlsContainer, "dependencies", "Show Dependencies", false, function(checked) {
+      showDependencies = checked;
+      updateTimeline();
+    });
+
+    appendDependencyToggle(controlsContainer, "critical-path", "Show Critical Path", false, function(checked) {
+      showCriticalPath = checked;
+      updateTimeline();
+    });
+
+    // Add legend for arrow colors
+    var arrowLegend = document.createElement("div");
+    arrowLegend.setAttribute("class", "arrow-legend");
+    arrowLegend.innerHTML = 
+      '<div class="legend-item"><span class="legend-line regular-dep"></span> Regular Dependency</div>' +
+      '<div class="legend-item"><span class="legend-line critical-dep"></span> Critical Path</div>';
+    controlsContainer.appendChild(arrowLegend);
 
     legendElement = document.createElement("legend");
     legendElement.innerText = "Highlight by phase";
@@ -227,6 +260,35 @@ function TimeLineApp() {
       else {
         sheet.removeRule(0);
       }
+    });
+  }
+
+  function appendDependencyToggle(controlsContainer, id, labelText, enabled, onChange) {
+    var label = document.createElement("label");
+    var input = document.createElement("input");
+    var name = "checkbox-" + id;
+
+    input.setAttribute("type", "checkbox");
+    input.setAttribute("name", name);
+    input.setAttribute("id", name);
+    label.setAttribute("for", name);
+
+    if (enabled) {
+      input.setAttribute("checked", true);
+    }
+
+    label.innerText = labelText;
+    label.appendChild(input);
+    controlsContainer.appendChild(label);
+
+    $(function () {
+      $("#" + name).checkboxradio({
+        icon: false,
+        value: enabled
+      });
+    });
+    $("#" + name).on("change", function (e) {
+      onChange(e.target.checked);
     });
   }
 
